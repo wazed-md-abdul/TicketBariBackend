@@ -87,7 +87,7 @@ const requireAdmin = requireRole("admin");
 // Create a new Ticket
 app.post("/api/tickets", requireVendor, async (req, res) => {
   try {
-    const { title, from, to, transportType, departureDateTime, price, ticketQuantity, image } = req.body;
+    const { title, from, to, transportType, departureDateTime, price, ticketQuantity, image, perks } = req.body;
 
     // Check if the vendor is marked as fraud
     const userDoc = await db.collection("user").findOne({ _id: new ObjectId(req.user.id) });
@@ -109,6 +109,7 @@ app.post("/api/tickets", requireVendor, async (req, res) => {
       price: Number(price),
       ticketQuantity: Number(ticketQuantity),
       image,
+      perks: Array.isArray(perks) ? perks : [],
       vendorId: req.user.id,
       status: "pending", // Default to pending approval
       isAdvertised: false,
@@ -236,7 +237,7 @@ app.get("/api/tickets/:id", async (req, res) => {
 app.put("/api/tickets/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, isAdvertised, title, from, to, transportType, departureDateTime, price, ticketQuantity, image } = req.body;
+    const { status, isAdvertised, title, from, to, transportType, departureDateTime, price, ticketQuantity, image, perks } = req.body;
 
     const ticket = await db.collection("tickets").findOne({ _id: new ObjectId(id) });
     if (!ticket) {
@@ -292,6 +293,7 @@ app.put("/api/tickets/:id", requireAuth, async (req, res) => {
       if (price !== undefined) updates.price = Number(price);
       if (ticketQuantity !== undefined) updates.ticketQuantity = Number(ticketQuantity);
       if (image) updates.image = image;
+      if (perks !== undefined) updates.perks = Array.isArray(perks) ? perks : [];
 
       // Reset to pending if updated by vendor
       updates.status = "pending";
