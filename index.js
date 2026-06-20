@@ -376,7 +376,7 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
       vendorId: ticket.vendorId,
       bookedQuantity: qty,
       totalPrice: ticket.price * qty,
-      status: "requested", // Default status
+      status: "pending", // Default status
       createdAt: new Date(),
     };
 

@@ -165,6 +165,10 @@ async function run() {
         image = trainImages[index % trainImages.length];
       }
 
+      // Generate some default perks
+      const allPerks = ["AC", "Wi-Fi", "Snacks", "Water", "Blanket"];
+      const perks = allPerks.slice(0, Math.floor(Math.random() * 3) + 2); // 2 to 4 random perks
+
       return {
         title,
         from,
@@ -174,6 +178,7 @@ async function run() {
         price,
         ticketQuantity: Math.floor(Math.random() * 40 + 5), // 5 to 45 seats
         image,
+        perks,
         vendorId,
         status,
         isAdvertised: false,
