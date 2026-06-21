@@ -395,8 +395,9 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
 // Get user bookings or vendor requested bookings
 app.get("/api/bookings", requireAuth, async (req, res) => {
   try {
+    const { as } = req.query;
     let bookingsList = [];
-    if (req.user.role === "vendor") {
+    if (req.user.role === "vendor" && as !== "passenger") {
       bookingsList = await db.collection("bookings")
         .find({ vendorId: req.user.id })
         .sort({ createdAt: -1 })
