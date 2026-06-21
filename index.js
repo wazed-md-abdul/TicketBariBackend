@@ -545,25 +545,49 @@ app.get("/api/vendor/stats", requireVendor, async (req, res) => {
       .toArray();
 
     let totalRevenue = 0;
-    const transportBreakdown = { bus: 0, train: 0, air: 0 };
+    let totalTicketsSold = 0;
+    const transportBreakdown = {
+      bus: { revenue: 0, bookings: 0, ticketsSold: 0 },
+      train: { revenue: 0, bookings: 0, ticketsSold: 0 },
+      air: { revenue: 0, bookings: 0, ticketsSold: 0 }
+    };
 
     bookings.forEach((b) => {
       totalRevenue += b.totalPrice || 0;
+      totalTicketsSold += b.bookedQuantity || 0;
       const type = (b.transportType || "bus").toLowerCase();
       if (transportBreakdown[type] !== undefined) {
-        transportBreakdown[type] += b.totalPrice || 0;
+        transportBreakdown[type].revenue += b.totalPrice || 0;
+        transportBreakdown[type].bookings += 1;
+        transportBreakdown[type].ticketsSold += b.bookedQuantity || 0;
       }
     });
 
     const chartData = [
-      { name: "Bus", revenue: transportBreakdown.bus },
-      { name: "Train", revenue: transportBreakdown.train },
-      { name: "Air", revenue: transportBreakdown.air },
+      { 
+        name: "Bus", 
+        revenue: transportBreakdown.bus.revenue, 
+        bookings: transportBreakdown.bus.bookings, 
+        ticketsSold: transportBreakdown.bus.ticketsSold 
+      },
+      { 
+        name: "Train", 
+        revenue: transportBreakdown.train.revenue, 
+        bookings: transportBreakdown.train.bookings, 
+        ticketsSold: transportBreakdown.train.ticketsSold 
+      },
+      { 
+        name: "Air", 
+        revenue: transportBreakdown.air.revenue, 
+        bookings: transportBreakdown.air.bookings, 
+        ticketsSold: transportBreakdown.air.ticketsSold 
+      },
     ];
 
     res.json({
       revenue: totalRevenue,
       totalBookings: bookings.length,
+      totalTicketsSold,
       chartData,
     });
   } catch (err) {
