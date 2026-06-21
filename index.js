@@ -258,11 +258,17 @@ app.put("/api/tickets/:id", requireAuth, async (req, res) => {
       }
       if (isAdvertised !== undefined) {
         if (isAdvertised === true) {
-          // Verify hard ad limits of max 6 active advertised ads
+          // Count only ads that actually appear on the homepage
+          // (same filters as GET /api/advertisements)
+          const fraudUsers = await db.collection("user").find({ isFraud: true }).toArray();
+          const fraudVendorIds = fraudUsers.map(u => u.id || u._id?.toString());
+
           const activeAdsCount = await db.collection("tickets").countDocuments({
             isAdvertised: true,
             status: "approved",
+            ticketQuantity: { $gt: 0 },
             departureDateTime: { $gt: new Date().toISOString() },
+            vendorId: { $nin: fraudVendorIds },
           });
 
           if (activeAdsCount >= 6 && !ticket.isAdvertised) {
@@ -373,6 +379,10 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
     const newBooking = {
       ticketId: ticket._id.toString(),
       ticketTitle: ticket.title,
+      from: ticket.from,
+      to: ticket.to,
+      image: ticket.image || null,
+      unitPrice: ticket.price,
       departureDateTime: ticket.departureDateTime,
       transportType: ticket.transportType,
       userId: req.user.id,
@@ -395,8 +405,9 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
 // Get user bookings or vendor requested bookings
 app.get("/api/bookings", requireAuth, async (req, res) => {
   try {
+    const { as } = req.query;
     let bookingsList = [];
-    if (req.user.role === "vendor") {
+    if (req.user.role === "vendor" && as !== "passenger") {
       bookingsList = await db.collection("bookings")
         .find({ vendorId: req.user.id })
         .sort({ createdAt: -1 })
@@ -437,12 +448,8 @@ app.put("/api/bookings/:id/status", requireVendor, async (req, res) => {
       { $set: { status } }
     );
 
-    if (status === "accepted") {
-      await db.collection("tickets").updateOne(
-        { _id: new ObjectId(booking.ticketId) },
-        { $inc: { ticketQuantity: -Number(booking.bookedQuantity) } }
-      );
-    }
+    // NOTE: Seat deduction happens only after successful payment (webhook)
+    // to avoid deducting seats for bookings that never get paid.
 
     res.json({ success: true, message: `Booking status updated to ${status}` });
   } catch (err) {
@@ -464,10 +471,24 @@ app.put("/api/bookings/:id/pay", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Permission denied." });
     }
 
+    // Prevent double payment/seat deduction if already paid
+    if (booking.status === "paid") {
+      return res.json({ success: true, message: "Payment already confirmed." });
+    }
+
     await db.collection("bookings").updateOne(
       { _id: new ObjectId(id) },
       { $set: { status: "paid" } }
     );
+
+    // Deduct seats from ticket inventory (only after confirmed payment)
+    const qty = Number(booking.bookedQuantity || 0);
+    if (booking.ticketId && qty > 0) {
+      await db.collection("tickets").updateOne(
+        { _id: new ObjectId(booking.ticketId) },
+        { $inc: { ticketQuantity: -qty } }
+      );
+    }
 
     // Insert transaction details into transactions collection if not exists
     const txExists = await db.collection("transactions").findOne({ bookingId: id });
@@ -481,7 +502,7 @@ app.put("/api/bookings/:id/pay", requireAuth, async (req, res) => {
       });
     }
 
-    res.json({ success: true, message: "Payment status updated to paid" });
+    res.json({ success: true, message: "Payment status updated to paid and seats deducted." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -545,25 +566,49 @@ app.get("/api/vendor/stats", requireVendor, async (req, res) => {
       .toArray();
 
     let totalRevenue = 0;
-    const transportBreakdown = { bus: 0, train: 0, air: 0 };
+    let totalTicketsSold = 0;
+    const transportBreakdown = {
+      bus: { revenue: 0, bookings: 0, ticketsSold: 0 },
+      train: { revenue: 0, bookings: 0, ticketsSold: 0 },
+      air: { revenue: 0, bookings: 0, ticketsSold: 0 }
+    };
 
     bookings.forEach((b) => {
       totalRevenue += b.totalPrice || 0;
+      totalTicketsSold += b.bookedQuantity || 0;
       const type = (b.transportType || "bus").toLowerCase();
       if (transportBreakdown[type] !== undefined) {
-        transportBreakdown[type] += b.totalPrice || 0;
+        transportBreakdown[type].revenue += b.totalPrice || 0;
+        transportBreakdown[type].bookings += 1;
+        transportBreakdown[type].ticketsSold += b.bookedQuantity || 0;
       }
     });
 
     const chartData = [
-      { name: "Bus", revenue: transportBreakdown.bus },
-      { name: "Train", revenue: transportBreakdown.train },
-      { name: "Air", revenue: transportBreakdown.air },
+      { 
+        name: "Bus", 
+        revenue: transportBreakdown.bus.revenue, 
+        bookings: transportBreakdown.bus.bookings, 
+        ticketsSold: transportBreakdown.bus.ticketsSold 
+      },
+      { 
+        name: "Train", 
+        revenue: transportBreakdown.train.revenue, 
+        bookings: transportBreakdown.train.bookings, 
+        ticketsSold: transportBreakdown.train.ticketsSold 
+      },
+      { 
+        name: "Air", 
+        revenue: transportBreakdown.air.revenue, 
+        bookings: transportBreakdown.air.bookings, 
+        ticketsSold: transportBreakdown.air.ticketsSold 
+      },
     ];
 
     res.json({
       revenue: totalRevenue,
       totalBookings: bookings.length,
+      totalTicketsSold,
       chartData,
     });
   } catch (err) {
