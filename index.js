@@ -33,6 +33,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Root greeting endpoint
+app.get("/", (req, res) => {
+  res.send("Welcome to TicketBari API Server!");
+});
+
 const requireAuth = async (req, res, next) => {
   try {
     let token = "";
