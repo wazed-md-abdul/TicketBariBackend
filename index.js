@@ -592,6 +592,11 @@ app.get("/api/transactions", requireAuth, async (req, res) => {
   }
 });
 
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "healthy", timestamp: new Date() });
+});
+
 // Start listening (skip in Vercel serverless)
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
