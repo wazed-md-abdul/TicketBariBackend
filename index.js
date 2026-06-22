@@ -471,10 +471,24 @@ app.put("/api/bookings/:id/pay", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Permission denied." });
     }
 
+    // Prevent double payment/seat deduction if already paid
+    if (booking.status === "paid") {
+      return res.json({ success: true, message: "Payment already confirmed." });
+    }
+
     await db.collection("bookings").updateOne(
       { _id: new ObjectId(id) },
       { $set: { status: "paid" } }
     );
+
+    // Deduct seats from ticket inventory (only after confirmed payment)
+    const qty = Number(booking.bookedQuantity || 0);
+    if (booking.ticketId && qty > 0) {
+      await db.collection("tickets").updateOne(
+        { _id: new ObjectId(booking.ticketId) },
+        { $inc: { ticketQuantity: -qty } }
+      );
+    }
 
     // Insert transaction details into transactions collection if not exists
     const txExists = await db.collection("transactions").findOne({ bookingId: id });
@@ -488,7 +502,7 @@ app.put("/api/bookings/:id/pay", requireAuth, async (req, res) => {
       });
     }
 
-    res.json({ success: true, message: "Payment status updated to paid" });
+    res.json({ success: true, message: "Payment status updated to paid and seats deducted." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
