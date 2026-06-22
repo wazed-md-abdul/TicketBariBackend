@@ -438,12 +438,8 @@ app.put("/api/bookings/:id/status", requireVendor, async (req, res) => {
       { $set: { status } }
     );
 
-    if (status === "accepted") {
-      await db.collection("tickets").updateOne(
-        { _id: new ObjectId(booking.ticketId) },
-        { $inc: { ticketQuantity: -Number(booking.bookedQuantity) } }
-      );
-    }
+    // NOTE: Seat deduction happens only after successful payment (webhook)
+    // to avoid deducting seats for bookings that never get paid.
 
     res.json({ success: true, message: `Booking status updated to ${status}` });
   } catch (err) {
