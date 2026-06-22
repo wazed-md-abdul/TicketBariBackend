@@ -258,11 +258,17 @@ app.put("/api/tickets/:id", requireAuth, async (req, res) => {
       }
       if (isAdvertised !== undefined) {
         if (isAdvertised === true) {
-          // Verify hard ad limits of max 6 active advertised ads
+          // Count only ads that actually appear on the homepage
+          // (same filters as GET /api/advertisements)
+          const fraudUsers = await db.collection("user").find({ isFraud: true }).toArray();
+          const fraudVendorIds = fraudUsers.map(u => u.id || u._id?.toString());
+
           const activeAdsCount = await db.collection("tickets").countDocuments({
             isAdvertised: true,
             status: "approved",
+            ticketQuantity: { $gt: 0 },
             departureDateTime: { $gt: new Date().toISOString() },
+            vendorId: { $nin: fraudVendorIds },
           });
 
           if (activeAdsCount >= 6 && !ticket.isAdvertised) {
@@ -373,6 +379,10 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
     const newBooking = {
       ticketId: ticket._id.toString(),
       ticketTitle: ticket.title,
+      from: ticket.from,
+      to: ticket.to,
+      image: ticket.image || null,
+      unitPrice: ticket.price,
       departureDateTime: ticket.departureDateTime,
       transportType: ticket.transportType,
       userId: req.user.id,
