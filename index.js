@@ -33,7 +33,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Root greeting endpoint
+
 app.get("/", (req, res) => {
   res.send("Welcome to TicketBari API Server!");
 });
@@ -85,9 +85,7 @@ const requireRole = (role) => async (req, res, next) => {
 const requireVendor = requireRole("vendor");
 const requireAdmin = requireRole("admin");
 
-// -------------------------------------------------------------------
-// TICKETS ENDPOINTS
-// -------------------------------------------------------------------
+
 
 // Create a new Ticket
 app.post("/api/tickets", requireVendor, async (req, res) => {
